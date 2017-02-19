@@ -220,7 +220,6 @@ GetVpValueWithPrec(VALUE v, long prec, int must)
     ENTER(1);
     Real *pv;
     VALUE num, bg;
-    char szD[128];
     VALUE orig = Qundef;
     double d;
 
@@ -270,8 +269,7 @@ again:
 	break;
 
       case T_FIXNUM:
-	sprintf(szD, "%ld", FIX2LONG(v));
-	return VpCreateRbObject(VpBaseFig() * 2 + 1, szD);
+	return VpCreateRbLong(FIX2LONG(v));
 
 #ifdef ENABLE_NUMERIC_STRING
       case T_STRING:
@@ -657,6 +655,40 @@ VP_EXPORT Real *
 VpCreateRbObject(size_t mx, const char *str)
 {
     return VpNewRbClass(mx, str, rb_cBigDecimal);
+}
+
+VP_EXPORT Real *
+VpCreateRbLong(long x)
+{
+    enum {decimal_size_of_long = DECIMAL_SIZE_OF_BITS(SIZEOF_LONG*CHAR_BIT)};
+    enum {max_digits = (decimal_size_of_long + BASE_FIG - 1) / BASE_FIG};
+    BDIGIT bd[max_digits];
+    Real *vp;
+    size_t mx = 1;
+    int i, sign;
+
+    if (x < 0) {
+	x = -x;
+	sign = VP_SIGN_NEGATIVE_FINITE;
+    }
+    else if (x > 0) {
+	sign = VP_SIGN_POSITIVE_FINITE;
+    }
+    else {
+	sign = VP_SIGN_POSITIVE_ZERO;
+    }
+    i = max_digits;
+    do {
+	bd[--i] = (BDIGIT)(x % BASE);
+	x /= BASE;
+    } while (x && i);
+    mx = max_digits - i;
+    vp = VpCreateRbObject(mx * BASE_FIG, NULL);
+    vp->Prec = mx;
+    vp->exponent = mx;
+    vp->sign = sign;
+    MEMCPY(vp->frac, bd + i, BDIGIT, mx);
+    return vp;
 }
 
 #define VpAllocReal(prec) (Real *)VpMemAlloc(offsetof(Real, frac) + (prec) * sizeof(BDIGIT))
